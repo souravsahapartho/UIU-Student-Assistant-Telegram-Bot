@@ -18,6 +18,8 @@ from keyboards import (
     get_fee_discount_keyboard,
 )
 
+from database import log_user_activity
+
 INSTALLMENT_FINE = 500
 
 
@@ -38,6 +40,13 @@ async def fee_start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    if update.effective_user:
+        log_user_activity(
+            update.effective_user.id,
+            update.effective_user.first_name,
+            update.effective_user.username,
+        )
+
     context.user_data["fee_data"] = {}
 
     await update.message.reply_text(

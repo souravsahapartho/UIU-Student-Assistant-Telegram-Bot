@@ -117,8 +117,9 @@ async def broadcast_message(
 
     for user in users:
         try:
+            telegram_id = user["telegram_id"] if isinstance(user, dict) else user
             await context.bot.send_message(
-                chat_id=user["telegram_id"],
+                chat_id=telegram_id,
                 text=message,
             )
             success += 1

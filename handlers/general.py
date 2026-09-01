@@ -1,5 +1,4 @@
 import logging
-import feedparser
 
 from telegram import (
     Update,
@@ -16,9 +15,10 @@ from keyboards import (
     get_links_keyboard,
 )
 
+from services.notice_service import get_cached_notices
+
 from database import (
     log_user_activity,
-    get_recent_notices,
     get_notification_status,
     toggle_notification,
 )
@@ -539,67 +539,39 @@ async def notices(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    await update.message.reply_text("⏳ Fetching latest notices from UIU website...")
-
-    feed_url = "https://www.uiu.ac.bd/notice/feed/"
-
-    try:
-        feed = feedparser.parse(feed_url)
-
-        if feed.entries:
-            msg = "📢 **Latest UIU Notices:**\n\n"
-
-            for entry in feed.entries[:5]:
-                title = entry.get(
-                    "title",
-                    "Untitled Notice",
-                )
-
-                link = entry.get(
-                    "link",
-                    "",
-                )
-
-                msg += f"📌 **{title}**\n" f"🔗 [Read Full Notice]({link})\n\n"
-
-            await update.message.reply_text(
-                msg,
-                parse_mode="Markdown",
-                disable_web_page_preview=True,
-            )
-
-            return
-
-    except Exception as error:
-        logger.error(
-            "Error fetching live notices: %s",
-            error,
+    if update.effective_user:
+        log_user_activity(
+            update.effective_user.id,
+            update.effective_user.first_name,
+            update.effective_user.username,
         )
 
-    db_notices = get_recent_notices(5)
+    notices_list = await get_cached_notices(5)
 
-    if db_notices:
-        msg = "📢 **Recent UIU Notices:**\n\n"
+    if notices_list:
+        msg = "📢 <b>Latest UIU Notices:</b>\n\n"
 
-        for notice in db_notices:
-            title = notice["title"]
+        for idx, notice in enumerate(notices_list, 1):
+            title = notice.get("title", "Untitled Notice")
+            link = notice.get("link") or notice.get("url") or ""
+            date_str = notice.get("published_date", "")
 
-            link = notice.get(
-                "link",
-                "",
-            )
-
-            msg += f"📌 **{title}**\n" f"🔗 [Read Full Notice]({link})\n\n"
+            msg += f"📌 <b>{idx}. {title}</b>\n"
+            if date_str:
+                msg += f"📅 <i>{date_str}</i>\n"
+            if link:
+                msg += f"🔗 <a href='{link}'>Read Full Notice</a>\n\n"
+            else:
+                msg += "\n"
 
         await update.message.reply_text(
             msg,
-            parse_mode="Markdown",
+            parse_mode="HTML",
             disable_web_page_preview=True,
         )
-
     else:
         await update.message.reply_text(
-            "📢 No notices available right now. " "Please check back later."
+            "📢 No notices available right now. Please check back later."
         )
 
 

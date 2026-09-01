@@ -21,6 +21,8 @@ from keyboards import (
     get_grade_keyboard,
 )
 
+from database import log_user_activity
+
 GRADE_POINTS = {
     "A": 4.00,
     "A-": 3.67,
@@ -130,6 +132,13 @@ async def cgpa_start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    if update.effective_user:
+        log_user_activity(
+            update.effective_user.id,
+            update.effective_user.first_name,
+            update.effective_user.username,
+        )
+
     context.user_data.pop(
         "cgpa_data",
         None,

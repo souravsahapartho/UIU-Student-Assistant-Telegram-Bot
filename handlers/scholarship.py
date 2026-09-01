@@ -30,6 +30,7 @@ from services.scholarship_service import (
 )
 
 from keyboards import get_main_menu
+from database import log_user_activity
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,13 @@ async def scholarship_start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    if update.effective_user:
+        log_user_activity(
+            update.effective_user.id,
+            update.effective_user.first_name,
+            update.effective_user.username,
+        )
+
     context.user_data["scholarship_data"] = {}
 
     await update.message.reply_text(

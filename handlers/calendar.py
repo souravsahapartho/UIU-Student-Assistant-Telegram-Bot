@@ -8,17 +8,14 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
+from database import log_user_activity
+
 from services.calendar_service import (
     get_latest_calendars,
 )
 
 
 def get_calendar_button_name(title: str) -> str:
-    """
-    Convert the full UIU calendar title into a short,
-    user-friendly button name.
-    """
-
     title = re.sub(
         r"\s+",
         " ",
@@ -89,6 +86,13 @@ async def academic_calendar(
 ):
     if not update.message:
         return
+
+    if update.effective_user:
+        log_user_activity(
+            update.effective_user.id,
+            update.effective_user.first_name,
+            update.effective_user.username,
+        )
 
     try:
         calendars = await get_latest_calendars(5)

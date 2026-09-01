@@ -16,7 +16,7 @@ uiu_assistant.db
 
 Python Cache
 
-pycache/
+__pycache__/
 *.py[cod]
 *$py.class
 

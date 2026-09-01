@@ -111,6 +111,7 @@ from handlers.scholarship import (
 )
 
 from services.calendar_service import sync_calendars
+from services.notice_service import sync_notices
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -136,7 +137,7 @@ async def send_calendar_notifications(
     new_items,
     updated_items,
 ):
-    users = get_notification_users()
+    users = await asyncio.to_thread(get_notification_users)
 
     if not users:
         return
@@ -240,7 +241,8 @@ async def calendar_update_job(
     context: ContextTypes.DEFAULT_TYPE,
 ):
     try:
-        initialized = get_setting(
+        initialized = await asyncio.to_thread(
+            get_setting,
             "CALENDAR_INITIALIZED",
             0,
         )
@@ -258,7 +260,8 @@ async def calendar_update_job(
         )
 
         if not initialized:
-            update_setting(
+            await asyncio.to_thread(
+                update_setting,
                 "CALENDAR_INITIALIZED",
                 1,
             )
@@ -279,6 +282,102 @@ async def calendar_update_job(
     except Exception as error:
         logger.error(
             "Academic calendar sync failed: %s",
+            error,
+            exc_info=True,
+        )
+
+
+async def send_notice_notifications(
+    context: ContextTypes.DEFAULT_TYPE,
+    new_notices,
+):
+    users = await asyncio.to_thread(get_notification_users)
+
+    if not users or not new_notices:
+        return
+
+    for notice in new_notices:
+        title = notice.get("title", "UIU Notice")
+        link = notice.get("link") or notice.get("url") or ""
+        published = notice.get("published_date", "")
+
+        text = (
+            "🔔 <b>New UIU Notice</b>\n\n"
+            f"📌 <b>{title}</b>\n"
+        )
+        if published:
+            text += f"📅 <i>{published}</i>\n\n"
+        else:
+            text += "\n"
+        text += "UIU has published a new notice."
+
+        keyboard = []
+        if link:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "📄 View Notice",
+                        url=link,
+                    )
+                ]
+            )
+
+        reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+        for telegram_id in users:
+            try:
+                await context.bot.send_message(
+                    chat_id=telegram_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                )
+            except Exception as error:
+                logger.warning(
+                    "Notice notification failed for %s: %s",
+                    telegram_id,
+                    error,
+                )
+
+
+async def notice_update_job(
+    context: ContextTypes.DEFAULT_TYPE,
+):
+    try:
+        initialized = await asyncio.to_thread(
+            get_setting,
+            "NOTICES_INITIALIZED",
+            0,
+        )
+
+        result = await sync_notices()
+
+        new_items = result.get(
+            "new",
+            [],
+        )
+
+        if not initialized:
+            await asyncio.to_thread(
+                update_setting,
+                "NOTICES_INITIALIZED",
+                1,
+            )
+            logger.info("Notices initialized without notification.")
+            return
+
+        if not new_items:
+            return
+
+        await send_notice_notifications(
+            context,
+            new_items,
+        )
+
+    except Exception as error:
+        logger.error(
+            "Notice sync failed: %s",
             error,
             exc_info=True,
         )
@@ -699,16 +798,26 @@ async def lifespan(
 
     if telegram_app.job_queue:
         telegram_app.job_queue.run_repeating(
+            notice_update_job,
+            interval=600,
+            first=10,
+            name="notice-check",
+        )
+
+        telegram_app.job_queue.run_repeating(
             calendar_update_job,
             interval=1800,
-            first=10,
+            first=20,
             name="academic-calendar-check",
         )
 
-        logger.info("Academic calendar checker started.")
+        logger.info("Background checkers for notices and academic calendar started.")
 
     else:
         logger.warning("JobQueue is unavailable.")
+
+    asyncio.create_task(sync_notices())
+    asyncio.create_task(sync_calendars())
 
     render_url = os.getenv("RENDER_EXTERNAL_URL")
 
