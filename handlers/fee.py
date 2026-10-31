@@ -271,6 +271,21 @@ async def get_retake_credits(
 
         data = context.user_data["fee_data"]
 
+        used_credits = sum(data.get("first_retake_credits", [])) + sum(
+            data.get("repeat_retake_credits", [])
+        )
+        remaining_credits = data.get("reg_credits", 0) - used_credits
+
+        if credit > remaining_credits:
+            await update.message.reply_text(
+                "⚠️ Retake credits cannot exceed your registered credits.\n\n"
+                f"Credits left for retakes: {max(remaining_credits, 0):g}\n"
+                "Please enter this course's credit again.",
+                reply_markup=get_cancel_keyboard(),
+            )
+
+            return FEE_RETAKE_CREDITS
+
         stage = data.get(
             "retake_stage",
             "first",
